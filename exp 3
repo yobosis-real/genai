@@ -1,33 +1,68 @@
-import torch, random
-import torch.nn as nn, torch.optim as optim
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import random
 
-logs = ["process injection detected","suspicious dll loaded","outbound traffic to blacklisted domain",
-        "privilege escalation attempt","keylogger activity found"]
+logs = [
+    "process injection detected",
+    "suspicious dll loaded",
+    "outbound traffic blacklisted domain",
+    "privilege escalation attempt",
+    "keylogger activity found"
+]
+
 vocab = list(set(" ".join(logs).split()))
-w2i = {w:i for i,w in enumerate(vocab)}; 
-i2w = {i:w for w,i in w2i.items()}
-V = len(vocab); Z = 8
+word2idx = {w: i for i, w in enumerate(vocab)}
+idx2word = {i: w for w, i in word2idx.items()}
+vocab_size = len(vocab)
 
-G = nn.Sequential(nn.Linear(Z, V), nn.Softmax(dim=1))
-D = nn.Sequential(nn.Linear(V,1), nn.Sigmoid())
-g_opt = optim.Adam(G.parameters(), lr=0.01); 
+class Generator(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.embed = nn.Embedding(vocab_size, 8)
+        self.fc = nn.Linear(8, vocab_size)
+
+    def forward(self, x):
+        return self.fc(self.embed(x))
+
+class Discriminator(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.embed = nn.Embedding(vocab_size, 8)
+        self.fc = nn.Linear(8, 1)
+
+    def forward(self, x):
+        return torch.sigmoid(self.fc(self.embed(x)))
+
+G = Generator()
+D = Discriminator()
+
+g_opt = optim.Adam(G.parameters(), lr=0.01)
 d_opt = optim.Adam(D.parameters(), lr=0.01)
 
-def one_hot(i): 
-    v = torch.zeros(1, V); v[0,i]=1.0; return v
-
 for _ in range(100):
-    real = one_hot(random.randint(0, V-1))
-    z = torch.randn(1, Z)
-    fake = G(z)
-    d_opt.zero_grad()
-    d_real = D(real); d_fake = D(fake.detach())
-    d_loss = -torch.log(d_real+1e-8) - torch.log(1-d_fake+1e-8)
-    d_loss.mean().backward(); d_opt.step()
-    g_opt.zero_grad()
-    g_loss = -torch.log(D(fake)+1e-8).mean()
-    g_loss.backward(); g_opt.step()
+    real = torch.tensor(
+        [word2idx[random.choice(log.split())] for log in logs]
+    )
 
-z = torch.randn(1, Z)
-out = G(z).argmax(dim=1).item()
-print("Generated word:", i2w[out])
+    noise = torch.randint(0, vocab_size, real.shape)
+    fake = G(noise).argmax(dim=1)
+
+    # Train Discriminator
+    d_real = D(real)
+    d_fake = D(fake.detach())
+    d_loss = -(torch.log(d_real) + torch.log(1 - d_fake)).mean()
+
+    d_opt.zero_grad()
+    d_loss.backward()
+    d_opt.step()
+
+    # Train Generator
+    g_loss = -torch.log(D(fake)).mean()
+    g_opt.zero_grad()
+    g_loss.backward()
+    g_opt.step()
+
+out = torch.randint(0, vocab_size, (1,))
+word = idx2word[G(out).argmax().item()]
+print("Generated log:", word)
