@@ -1,25 +1,21 @@
-import openai
-import ipywidgets as widgets
-from IPython.display import display,Markdown
+from google.colab import output; output.enable_custom_widget_manager()
 
-openai.api_key="your api key here"
+import google.generativeai as genai, ipywidgets as w
+from IPython.display import display, Markdown
+
+genai.configure(api_key="AIzaSyCgFcYAigEUSiA29Lwl4A254oLMkg-7_ro")
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 def review(code):
-  responses = openai.ChatCompletion.create(
-      model="gpt-3.5-turbo",
-      messages=[{"role":"user","content":f"Review this code :\n{code}"}]
-  )
-  return responses["choices"][0]["messsages"]["content"]
+    return " No code." if not code.strip() else model.generate_content(
+        f"Review this code:\n{code}"
+    ).text
 
-box = widgets.Textarea(placeholder="paste code here.")
-btn = widgets.Button(description="Review")
-out = widgets.Output()
+box = w.Textarea(placeholder="paste code here", layout=w.Layout(width="100%", height="180px"))
+btn = w.Button(description="Review")
+out = w.Output()
 
-def run(b):
-  with out:
-    out.clear_output()
-    result=review(box.value)
-    display(Markdown("### Result:\n"+result))
+btn.on_click(lambda b: (out.clear_output(),
+    out.append_display_data(Markdown("### Result:\n"+review(box.value)))))
 
-btn.on_click(run)
-display(box,btn,out)
+display(box, btn, out)
