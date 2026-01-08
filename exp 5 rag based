@@ -1,38 +1,68 @@
-# Install:
-# pip install langchain langchain-community chromadb sentence-transformers transformers
+# -----------------------------
+# Install dependencies
+# -----------------------------
+!pip install -q chromadb sentence-transformers transformers accelerate langchain-community langchain-core
 
-from langchain_community.document_loaders import TextLoader
-from langchain.text_splitter import CharacterTextSplitter
+# -----------------------------
+# Imports
+# -----------------------------
+from langchain_core.documents import Document
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain.chains import RetrievalQA
-from langchain.llms import HuggingFacePipeline
 from transformers import pipeline
 
-# LLM
-pipe = pipeline("text-generation", model="google/gemma-2b-it", max_new_tokens=100)
-llm = HuggingFacePipeline(pipeline=pipe)
+# -----------------------------
+# Knowledge base
+# -----------------------------
+text = """
+CVE-2022-23397 is a remote code execution vulnerability in Apache Log4j.
+Attackers exploit it using crafted log messages.
 
-# Load text file
-docs = TextLoader("threat.txt").load()
+Port scanning is a reconnaissance technique to discover open ports and services.
+It can be detected using IDS alerts, firewall logs, and abnormal traffic patterns.
 
-# Split
-chunks = CharacterTextSplitter(chunk_size=200, chunk_overlap=20).split_documents(docs)
+PowerShell abuse indicates post-exploitation activity such as fileless malware,
+persistence, and lateral movement in Windows systems.
+"""
 
-# Embeddings
-emb = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# -----------------------------
+# Manual chunking
+# -----------------------------
+chunks = [text[i:i+200] for i in range(0, len(text), 180)]
+documents = [Document(page_content=c) for c in chunks]
 
+# -----------------------------
 # Vector DB
-db = Chroma.from_documents(chunks, emb, persist_directory="rag_db")
+# -----------------------------
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+db = Chroma.from_documents(documents, embeddings)
 
-# QA chain
-qa = RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever())
+# -----------------------------
+# Correct T5 pipeline
+# -----------------------------
+llm = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-base",
+    max_new_tokens=120
+)
 
-# Ask questions
-def ask(q):
-    print("Q:", q)
-    print("A:", qa.run(q), "\n")
+# -----------------------------
+# Manual RAG QA
+# -----------------------------
+def ask(question):
+    docs = db.similarity_search(question, k=2)
+    context = " ".join(d.page_content for d in docs)
+    prompt = f"Context:\n{context}\n\nQuestion: {question}\nAnswer:"
+    answer = llm(prompt)[0]["generated_text"]
+    print("Q:", question)
+    print("A:", answer)
+    print("-" * 60)
 
-ask("What is CVE‑2022‑23397?")
+# -----------------------------
+# Queries
+# -----------------------------
+ask("What is CVE-2022-23397?")
 ask("How do I detect port scanning?")
-ask("What does powershell abuse indicate?")
+ask("What does PowerShell abuse indicate?")
