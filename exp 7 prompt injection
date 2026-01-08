@@ -1,11 +1,16 @@
-import openai
+!pip install -q google-generativeai ipywidgets
+from google.colab import output; output.enable_custom_widget_manager()
+
+import google.generativeai as genai
 import ipywidgets as widgets
 from IPython.display import display, Markdown
 import re
 
-openai.api_key = "your_api_key_here"
+# Configure Gemini API
+genai.configure(api_key="AIzaSyCgFcYAigEUSiA29Lwl4A254oLMkg-7_ro")
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
-# Very simple prompt‑injection check
+# Very simple prompt-injection check
 def is_prompt_injection(text):
     patterns = [
         r"ignore previous instructions",
@@ -15,30 +20,20 @@ def is_prompt_injection(text):
         r"act as",
         r"system:"
     ]
-    for p in patterns:
-        if re.search(p, text, re.IGNORECASE):
-            return True
-    return False
+    return any(re.search(p, text, re.IGNORECASE) for p in patterns)
 
-# Super‑simple chat function
+# Secure chat function
 def secure_chat(text):
     if is_prompt_injection(text):
-        return "Blocked"
+        return  "Blocked (possible prompt injection detected)"
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": text}
-        ]
-    )
-    return response["choices"][0]["message"]["content"]
+    response = model.generate_content(text)
+    return response.text
 
 # Widgets
 user_input = widgets.Textarea(
-    value="",
     placeholder="Type here...",
-    description="Input:"
+    layout=widgets.Layout(width="100%", height="150px")
 )
 
 button = widgets.Button(description="Send")
